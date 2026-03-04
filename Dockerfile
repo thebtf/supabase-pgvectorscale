@@ -9,6 +9,7 @@
 
 ARG PGVECTORSCALE_VERSION=0.9.0
 ARG PG_MAJOR=17
+ARG BASE_TAG=17.6.1.087
 
 # Stage 1: extract .deb contents using a standard Debian image
 FROM debian:bookworm-slim AS builder
@@ -27,7 +28,7 @@ RUN apt-get update \
     && rm -rf /tmp/pgvectorscale*
 
 # Stage 2: copy extension files into supabase/postgres
-ARG BASE_TAG=17.6.1.087
+ARG BASE_TAG
 FROM supabase/postgres:${BASE_TAG}
 
 COPY --from=builder /out/usr/lib/postgresql/ /usr/lib/postgresql/
