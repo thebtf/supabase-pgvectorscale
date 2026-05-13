@@ -33,18 +33,19 @@ FROM supabase/postgres:${BASE_TAG}
 
 ARG PG_MAJOR
 
-# supabase/postgres uses Nix — extensions must land in Nix paths, not /usr/lib.
-# .so  → pg_config --pkglibdir
-# .sql/.control → pg_config --sharedir + /extension/
-RUN PG_LIBDIR=$(pg_config --pkglibdir) \
-    && PG_SHAREDIR=$(pg_config --sharedir)/extension \
-    && echo "PG_LIBDIR=$PG_LIBDIR" > /tmp/pg_paths \
-    && echo "PG_SHAREDIR=$PG_SHAREDIR" >> /tmp/pg_paths
+# supabase/postgres uses Nix with two separate store paths:
+#   pg_config --pkglibdir  → lib-only derivation (NOT used by runtime)
+#   postgres binary $libdir → postgresql-and-plugins derivation (USED by runtime)
+# Extensions must go into the postgres binary's store path, not pg_config's.
 
 COPY --from=builder /out/usr/lib/postgresql/${PG_MAJOR}/lib/ /tmp/pgvs-lib/
 COPY --from=builder /out/usr/share/postgresql/${PG_MAJOR}/extension/ /tmp/pgvs-ext/
 
-RUN . /tmp/pg_paths \
-    && cp /tmp/pgvs-lib/*.so "$PG_LIBDIR/" \
+RUN PG_BIN=$(readlink -f /nix/var/nix/profiles/default/bin/postgres) \
+    && PG_RUNTIME_LIBDIR="$(dirname "$(dirname "$PG_BIN")")/lib" \
+    && PG_SHAREDIR="$(pg_config --sharedir)/extension" \
+    && echo "Runtime libdir: $PG_RUNTIME_LIBDIR" \
+    && echo "Share dir: $PG_SHAREDIR" \
+    && cp /tmp/pgvs-lib/*.so "$PG_RUNTIME_LIBDIR/" \
     && cp /tmp/pgvs-ext/* "$PG_SHAREDIR/" \
-    && rm -rf /tmp/pgvs-lib /tmp/pgvs-ext /tmp/pg_paths
+    && rm -rf /tmp/pgvs-lib /tmp/pgvs-ext
